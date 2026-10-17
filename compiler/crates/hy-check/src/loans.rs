@@ -296,8 +296,7 @@ impl<'a> Checker<'a> {
                     // the call site from the callee's argument-store effect.
                     if let Some(decl) = self.fns.get(&name).copied() {
                         for (di, si) in self.collect_param_store_pairs(decl, 0) {
-                            let (Some(dst_arg), Some(src_arg)) =
-                                (cr.args.get(di), cr.args.get(si))
+                            let (Some(dst_arg), Some(src_arg)) = (cr.args.get(di), cr.args.get(si))
                             else {
                                 continue;
                             };
@@ -578,7 +577,9 @@ impl<'a> Checker<'a> {
                     self.expr_fnlit_store_pairs(v, alias, depth, out);
                 }
             }
-            Stmt::Assign { targets, values, .. } => {
+            Stmt::Assign {
+                targets, values, ..
+            } => {
                 for (t, v) in targets.iter().zip(values.iter()) {
                     match &t.kind {
                         PlaceKind::Ident(name) => {
@@ -653,8 +654,12 @@ impl<'a> Checker<'a> {
                 let subj = subject.root_ident().and_then(|r| alias.get(r).copied());
                 for arm in arms {
                     let mut a = alias.clone();
-                    if let (Some(p), MatchPattern::Path { binding: Some(b), .. }) =
-                        (subj, &arm.pattern)
+                    if let (
+                        Some(p),
+                        MatchPattern::Path {
+                            binding: Some(b), ..
+                        },
+                    ) = (subj, &arm.pattern)
                     {
                         a.insert(b.clone(), p);
                     }
@@ -728,7 +733,12 @@ impl<'a> Checker<'a> {
                     self.expr_fnlit_store_pairs(&a.value, alias, depth, out);
                 }
             }
-            Expr::Index { base, index, .. } | Expr::Binary { lhs: base, rhs: index, .. } => {
+            Expr::Index { base, index, .. }
+            | Expr::Binary {
+                lhs: base,
+                rhs: index,
+                ..
+            } => {
                 self.expr_fnlit_store_pairs(base, alias, depth, out);
                 self.expr_fnlit_store_pairs(index, alias, depth, out);
             }
