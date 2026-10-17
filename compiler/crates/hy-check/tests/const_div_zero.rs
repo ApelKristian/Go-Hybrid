@@ -111,6 +111,50 @@ fn main() {
 }
 ";
 
+const DIV_BY_FOLDED_ZERO: &str = "\
+fn main() {
+    x := 5
+    y := x / (1 - 1)
+    _ = y
+}
+";
+
+const MOD_BY_FOLDED_ZERO: &str = "\
+fn main() {
+    x := 5
+    y := x % (2 - 2)
+    _ = y
+}
+";
+
+const DIV_ASSIGN_BY_FOLDED_ZERO: &str = "\
+fn main() {
+    x := 5
+    x /= (0 * 5)
+    _ = x
+}
+";
+
+const MOD_ASSIGN_BY_FOLDED_ZERO: &str = "\
+fn main() {
+    x := 5
+    x %= (0 + 0)
+    _ = x
+}
+";
+
+const FOLDED_NONZERO_OK: &str = "\
+fn main() {
+    x := 5
+    a := x / (1 - 0)
+    b := x / (2 - 1)
+    c := x / (0 * 5 + 1)
+    _ = a
+    _ = b
+    _ = c
+}
+";
+
 const NONZERO_OK: &str = "\
 fn main() {
     x := 5
@@ -128,6 +172,62 @@ fn main() {
     x /= -5
     x %= -7
     fmt.println(\"{y} {z} {x}\")
+}
+";
+
+const LEGACY_OCTAL_NONZERO_OK: &str = "\
+fn main() {
+    x := 5
+    y := x / (010 - 10)
+    _ = y
+}
+";
+
+const LEGACY_OCTAL_ZERO_REJECT: &str = "\
+fn main() {
+    x := 5
+    y := x / (010 - 8)
+    _ = y
+}
+";
+
+const EXPLICIT_OCTAL_NONZERO_OK: &str = "\
+fn main() {
+    x := 5
+    y := x / (0o10 - 10)
+    _ = y
+}
+";
+
+const EXPLICIT_OCTAL_ZERO_REJECT: &str = "\
+fn main() {
+    x := 5
+    y := x / (0o10 - 8)
+    _ = y
+}
+";
+
+const HEX_FOLDED_ZERO_REJECT: &str = "\
+fn main() {
+    x := 5
+    y := x / (0x10 - 16)
+    _ = y
+}
+";
+
+const BIN_FOLDED_ZERO_REJECT: &str = "\
+fn main() {
+    x := 5
+    y := x / (0b10 - 2)
+    _ = y
+}
+";
+
+const LEGACY_OCTAL_ZERO_ZERO_REJECT: &str = "\
+fn main() {
+    x := 5
+    y := x / (00 - 0)
+    _ = y
 }
 ";
 
@@ -252,6 +352,66 @@ fn double_neg_zero_is_rejected() {
 }
 
 #[test]
+fn folded_div_by_zero_is_rejected() {
+    let r = check(DIV_BY_FOLDED_ZERO);
+    let cs = error_codes(&r);
+    assert!(
+        cs.iter().any(|c| c == "HYB-E6001"),
+        "expected HYB-E6001, got {:?}",
+        cs
+    );
+    assert_eq!(r.verdict, Verdict::Reject);
+}
+
+#[test]
+fn folded_mod_by_zero_is_rejected() {
+    let r = check(MOD_BY_FOLDED_ZERO);
+    let cs = error_codes(&r);
+    assert!(
+        cs.iter().any(|c| c == "HYB-E6001"),
+        "expected HYB-E6001, got {:?}",
+        cs
+    );
+    assert_eq!(r.verdict, Verdict::Reject);
+}
+
+#[test]
+fn folded_div_assign_by_zero_is_rejected() {
+    let r = check(DIV_ASSIGN_BY_FOLDED_ZERO);
+    let cs = error_codes(&r);
+    assert!(
+        cs.iter().any(|c| c == "HYB-E6001"),
+        "expected HYB-E6001, got {:?}",
+        cs
+    );
+    assert_eq!(r.verdict, Verdict::Reject);
+}
+
+#[test]
+fn folded_mod_assign_by_zero_is_rejected() {
+    let r = check(MOD_ASSIGN_BY_FOLDED_ZERO);
+    let cs = error_codes(&r);
+    assert!(
+        cs.iter().any(|c| c == "HYB-E6001"),
+        "expected HYB-E6001, got {:?}",
+        cs
+    );
+    assert_eq!(r.verdict, Verdict::Reject);
+}
+
+#[test]
+fn folded_nonzero_divisor_stays_accepted() {
+    let r = check(FOLDED_NONZERO_OK);
+    let cs = error_codes(&r);
+    assert!(
+        !cs.iter().any(|c| c == "HYB-E6001"),
+        "folded nonzero divisor must stay clean, got {:?}",
+        cs
+    );
+    assert_eq!(r.verdict, Verdict::Accept);
+}
+
+#[test]
 fn nonconst_zero_divisor_stays_accepted() {
     // Run-time panic path — out of scope for #149's first cut.
     let r = check(NONCONST_ZERO_OK);
@@ -285,4 +445,88 @@ fn negative_nonzero_divisor_stays_accepted() {
         cs
     );
     assert_eq!(r.verdict, Verdict::Accept);
+}
+
+#[test]
+fn legacy_octal_nonzero_divisor_stays_accepted() {
+    let r = check(LEGACY_OCTAL_NONZERO_OK);
+    let cs = error_codes(&r);
+    assert!(
+        !cs.iter().any(|c| c == "HYB-E6001"),
+        "legacy octal 010 - 10 is -2 in Go, must stay accepted, got {:?}",
+        cs
+    );
+    assert_eq!(r.verdict, Verdict::Accept);
+}
+
+#[test]
+fn legacy_octal_folded_zero_is_rejected() {
+    let r = check(LEGACY_OCTAL_ZERO_REJECT);
+    let cs = error_codes(&r);
+    assert!(
+        cs.iter().any(|c| c == "HYB-E6001"),
+        "legacy octal 010 - 8 is zero in Go, expected HYB-E6001, got {:?}",
+        cs
+    );
+    assert_eq!(r.verdict, Verdict::Reject);
+}
+
+#[test]
+fn explicit_octal_nonzero_divisor_stays_accepted() {
+    let r = check(EXPLICIT_OCTAL_NONZERO_OK);
+    let cs = error_codes(&r);
+    assert!(
+        !cs.iter().any(|c| c == "HYB-E6001"),
+        "explicit octal 0o10 - 10 is -2 in Go, must stay accepted, got {:?}",
+        cs
+    );
+    assert_eq!(r.verdict, Verdict::Accept);
+}
+
+#[test]
+fn explicit_octal_folded_zero_is_rejected() {
+    let r = check(EXPLICIT_OCTAL_ZERO_REJECT);
+    let cs = error_codes(&r);
+    assert!(
+        cs.iter().any(|c| c == "HYB-E6001"),
+        "explicit octal 0o10 - 8 is zero in Go, expected HYB-E6001, got {:?}",
+        cs
+    );
+    assert_eq!(r.verdict, Verdict::Reject);
+}
+
+#[test]
+fn hex_folded_zero_is_rejected() {
+    let r = check(HEX_FOLDED_ZERO_REJECT);
+    let cs = error_codes(&r);
+    assert!(
+        cs.iter().any(|c| c == "HYB-E6001"),
+        "0x10 - 16 is zero, expected HYB-E6001, got {:?}",
+        cs
+    );
+    assert_eq!(r.verdict, Verdict::Reject);
+}
+
+#[test]
+fn binary_folded_zero_is_rejected() {
+    let r = check(BIN_FOLDED_ZERO_REJECT);
+    let cs = error_codes(&r);
+    assert!(
+        cs.iter().any(|c| c == "HYB-E6001"),
+        "0b10 - 2 is zero, expected HYB-E6001, got {:?}",
+        cs
+    );
+    assert_eq!(r.verdict, Verdict::Reject);
+}
+
+#[test]
+fn legacy_octal_double_zero_is_rejected() {
+    let r = check(LEGACY_OCTAL_ZERO_ZERO_REJECT);
+    let cs = error_codes(&r);
+    assert!(
+        cs.iter().any(|c| c == "HYB-E6001"),
+        "00 - 0 is zero, expected HYB-E6001, got {:?}",
+        cs
+    );
+    assert_eq!(r.verdict, Verdict::Reject);
 }
